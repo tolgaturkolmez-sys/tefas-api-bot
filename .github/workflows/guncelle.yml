@@ -1,0 +1,35 @@
+name: TEFAS Gunluk Guncelleme
+
+on:
+  schedule:
+    # Hafta içi her gün Türkiye saatiyle yaklaşık 10:30'da çalışır (UTC 07:30)
+    - cron: '30 07 * * 1-5'
+  workflow_dispatch: # Bu satır, bizim butona basarak manuel test etmemizi sağlar
+
+permissions:
+  contents: write # Robotun JSON dosyasını repoya kaydetmesi için yetki veriyoruz
+
+jobs:
+  veri-cek-ve-kaydet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodları Al
+        uses: actions/checkout@v3
+
+      - name: Python Kur
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Gerekli Kütüphaneleri Yükle
+        run: pip install tefas pandas
+
+      - name: TEFAS Botunu Çalıştır
+        run: python tefas_bot.py
+
+      - name: Yeni Verileri GitHub'a Kaydet
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add yatirim_fonlari.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Otomatik Güncelleme: TEFAS Verileri" && git push)
