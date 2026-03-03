@@ -2,18 +2,16 @@ import requests
 import json
 import pandas as pd
 from datetime import datetime, timedelta
-import os
 
 def get_tefas_data():
     url = "https://www.tefas.gov.tr/api/DB/BindHistoryInfo"
     
-    # Tarih aralığını 1 haftaya çıkarıyoruz (Garanti olsun)
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=7)
+    start_date = end_date - timedelta(days=10)
     
     payload = {
         "fontip": "YAT",
-        "sfontip": "", # Bazı durumlarda bu boş veri gerekebiliyor
+        "sfontip": "",
         "bastarih": start_date.strftime("%d.%m.%Y"),
         "bittarih": end_date.strftime("%d.%m.%Y")
     }
@@ -21,26 +19,29 @@ def get_tefas_data():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "X-Requested-With": "XMLHttpRequest",
-        "Origin": "https://www.tefas.gov.tr",
-        "Referer": "https://www.tefas.gov.tr/FonAnaliz.aspx"
+        "Referer": "https://www.tefas.gov.tr/FonAnaliz.aspx",
+        "Origin": "https://www.tefas.gov.tr"
     }
     
-    print(f"TEFAS'tan veri isteniyor: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}")
-    
     try:
-        response = requests.post(url, data=payload, headers=headers, timeout=20)
-        print(f"API Yanıt Kodu: {response.status_code}")
+        response = requests.post(url, data=payload, headers=headers, timeout=30)
         
         if response.status_code == 200:
             raw_data = response.json()
             if 'data' not in raw_data or not raw_data['data']:
-                print("HATA: TEFAS boş veri döndürdü.")
+                print("HATA: Veri bulunamadı.")
                 return
                 
             df = pd.DataFrame(raw_data['data'])
-            print(f"Toplam {len(df)} satır veri alındı.")
+            
+            # --- KRİTİK DÜZELTME BURASI ---
+            # Eğer tarih sayısal gelirse milisaniyeden çevir, metin gelirse formatla oku
+            if pd.to_numeric(df['TARIH'], errors='coerce').notnull().all():
+                df['date_dt'] = pd.to_datetime(df['TARIH'].astype(float), unit='ms')
+            else:
+                df['date_dt'] = pd.to_datetime(df['TARIH'], format='%d.%m.%Y', errors='coerce')
+            # ------------------------------
 
-            df['date_dt'] = pd.to_datetime(df['TARIH'], format='%d.%m.%Y')
             latest_date = df['date_dt'].max()
             latest_df = df[df['date_dt'] == latest_date]
             
@@ -54,11 +55,11 @@ def get_tefas_data():
             with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, ensure_ascii=False, indent=2)
                 
-            print(f"BAŞARILI! {len(result)} fon kaydedildi. Dosya: yatirim_fonlari.json")
+            print(f"BAŞARILI! {len(result)} fon kaydedildi. Tarih: {latest_date.strftime('%Y-%m-%d')}")
         else:
-            print(f"HATA: API bağlantı sorunu. Kod: {response.status_code}")
+            print(f"API Hatası: {response.status_code}")
     except Exception as e:
-        print(f"KRİTİK HATA: {e}")
+        print(f"Hata: {e}")
 
 if __name__ == "__main__":
     get_tefas_data()
