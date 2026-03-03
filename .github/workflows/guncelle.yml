@@ -21,7 +21,7 @@ jobs:
           python-version: '3.10'
 
       - name: Gerekli Kütüphaneleri Yükle
-        run: pip install requests pandas # Sadece bunlar yeterli!
+        run: pip install requests pandas
 
       - name: TEFAS Botunu Çalıştır
         run: python tefas_bot.py
@@ -30,5 +30,10 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add yatirim_fonlari.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Otomatik Güncelleme: TEFAS Verileri" && git push)
+          # Eğer dosya varsa ekle, yoksa sessizce geç
+          if [ -f yatirim_fonlari.json ]; then
+            git add yatirim_fonlari.json
+            git diff --quiet && git diff --staged --quiet || (git commit -m "Otomatik Güncelleme: TEFAS Verileri" && git push)
+          else
+            echo "Dosya bulunamadı, kayıt işlemi atlanıyor."
+          fi
