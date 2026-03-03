@@ -22,7 +22,7 @@ jobs:
           python-version: '3.10'
 
       - name: Gerekli Kütüphaneleri Yükle
-        run: pip install tefas pandas
+        run: pip install tefas pandas webdriver-manager selenium
 
       - name: TEFAS Botunu Çalıştır
         run: python tefas_bot.py
