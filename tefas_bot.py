@@ -1,40 +1,60 @@
+import requests
 import json
+import pandas as pd
 from datetime import datetime, timedelta
-from tefas import Crawler
 
 def get_tefas_data():
-    crawler = Crawler()
-    # Hafta sonu boş dönmemesi için son 4 günün verisini tarıyoruz
-    start_date = (datetime.now() - timedelta(days=4)).strftime("%Y-%m-%d")
-    end_date = datetime.now().strftime("%Y-%m-%d")
+    url = "https://www.tefas.gov.tr/api/DB/BindHistoryInfo"
+    
+    # Son 3 günün verisini çek (Hafta sonu boşluğunu kapatmak için)
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=3)
+    
+    payload = {
+        "fontip": "YAT", # Yatırım fonları
+        "bastarih": start_date.strftime("%d.%m.%Y"),
+        "bittarih": end_date.strftime("%d.%m.%Y")
+    }
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Requested-With": "XMLHttpRequest"
+    }
     
     try:
-        # TEFAS'tan verileri çek
-        data = crawler.fetch(start=start_date, end=end_date, columns=['code', 'date', 'price'])
-        if data.empty:
-            print("Veri bulunamadı.")
-            return
+        response = requests.post(url, data=payload, headers=headers)
+        if response.status_code == 200:
+            raw_data = response.json()
+            if 'data' not in raw_data:
+                print("Veri formatı hatalı.")
+                return
+                
+            df = pd.DataFrame(raw_data['data'])
+            if df.empty:
+                print("Güncel veri bulunamadı.")
+                return
+
+            # En güncel tarihi bul ve veriyi filtrele
+            df['date_dt'] = pd.to_datetime(df['TARIH'], format='%d.%m.%Y')
+            latest_date = df['date_dt'].max()
+            latest_df = df[df['date_dt'] == latest_date]
             
-        # En güncel tarihi bul
-        latest_date = data['date'].max()
-        latest_data = data[data['date'] == latest_date]
-        
-        # JSON formatına çevir
-        result = {}
-        for index, row in latest_data.iterrows():
-            result[row['code']] = row['price']
-        
-        # Dosyaya kaydet
-        export_data = {
-            "guncellenme_tarihi": latest_date.strftime("%Y-%m-%d"),
-            "fonlar": result
-        }
-        
-        with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
-            json.dump(export_data, f, ensure_ascii=False, indent=2)
+            # JSON formatına çevir (FONKODU: FIYAT)
+            result = {}
+            for _, row in latest_df.iterrows():
+                result[row['FONKODU']] = row['FIYAT']
             
-        print(f"Başarılı! Veriler güncellendi: {latest_date.strftime('%Y-%m-%d')}")
+            export_data = {
+                "guncellenme_tarihi": latest_date.strftime("%Y-%m-%d"),
+                "fonlar": result
+            }
             
+            with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, ensure_ascii=False, indent=2)
+                
+            print(f"Başarılı! {len(result)} fon güncellendi. Tarih: {latest_date.strftime('%Y-%m-%d')}")
+        else:
+            print(f"TEFAS API Hatası: {response.status_code}")
     except Exception as e:
         print(f"Kritik Hata: {e}")
 
