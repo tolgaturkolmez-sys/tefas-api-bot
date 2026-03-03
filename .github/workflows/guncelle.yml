@@ -2,12 +2,11 @@ name: TEFAS Gunluk Guncelleme
 
 on:
   schedule:
-    # Hafta içi her gün Türkiye saatiyle yaklaşık 10:30'da çalışır (UTC 07:30)
     - cron: '30 07 * * 1-5'
-  workflow_dispatch: # Bu satır, bizim butona basarak manuel test etmemizi sağlar
+  workflow_dispatch: 
 
 permissions:
-  contents: write # Robotun JSON dosyasını repoya kaydetmesi için yetki veriyoruz
+  contents: write 
 
 jobs:
   veri-cek-ve-kaydet:
@@ -22,7 +21,7 @@ jobs:
           python-version: '3.10'
 
       - name: Gerekli Kütüphaneleri Yükle
-        run: pip install tefas pandas webdriver-manager selenium
+        run: pip install requests pandas # Sadece bunlar yeterli!
 
       - name: TEFAS Botunu Çalıştır
         run: python tefas_bot.py
