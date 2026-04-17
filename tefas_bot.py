@@ -17,7 +17,7 @@ def get_tefas_data():
     }
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" (KHTMLlike Gecko) Chrome/120.0.0.0 Safari/537.36",
         "X-Requested-With": "XMLHttpRequest",
         "Referer": "https://www.tefas.gov.tr/FonAnaliz.aspx",
         "Origin": "https://www.tefas.gov.tr"
