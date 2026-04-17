@@ -1,4 +1,15 @@
 import requests
+
+# 1. Bir oturum başlat (Ziyaretçi kartı alacağız)
+oturum = requests.Session()
+
+# 2. Önce ana sayfaya git ki TEFAS bize çerez (cookie) versin
+ana_sayfa_url = "https://www.tefas.gov.tr/FonAnaliz.aspx"
+oturum.get(ana_sayfa_url, headers=Başlıklar, timeout=20)
+
+# 3. Şimdi aynı oturum üzerinden (çerezlerle birlikte) POST isteği at
+# Not: data=yük yerine json=yük kullanıyoruz (Yeni standart bu)
+yanıt = oturum.post(url, json=yük, headers=Başlıklar, timeout=30)
 import json
 import pandas as pd
 from datetime import datetime, timedelta
