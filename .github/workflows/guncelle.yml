@@ -24,7 +24,10 @@ jobs:
         run: pip install requests pandas
 
       - name: TEFAS Botunu Çalıştır
-        run: python tefas_bot.py
+        run: |
+          python tefas_bot.py
+          # Eğer dosya güncellenmediyse hata ver
+          [ -f yatirim_fonlari.json ] || (echo "Dosya oluşturulamadı!" && exit 1)
 
       - name: Yeni Verileri GitHub'a Kaydet
         run: |
