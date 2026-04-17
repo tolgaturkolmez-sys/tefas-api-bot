@@ -10,8 +10,8 @@ def get_tefas_data():
     start_date = end_date - timedelta(days=10)
     
     payload = {
-        "fontip": "YAT",
-        "sfontip": "",
+        "fontipi": "YAT",
+        "sfontipi": "",
         "bastarih": start_date.strftime("%d.%m.%Y"),
         "bittarih": end_date.strftime("%d.%m.%Y")
     }
