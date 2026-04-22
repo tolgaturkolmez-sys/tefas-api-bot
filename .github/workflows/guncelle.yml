@@ -2,44 +2,33 @@ name: TEFAS Gunluk Guncelleme
 
 on:
   schedule:
-    - cron: '30 07 * * 1-5'
+    - cron: '30 07 * * 1-5' # Hafta içi her gün 10:30 TSİ
   workflow_dispatch: 
 
 permissions:
   contents: write 
 
 jobs:
-  veri-cek-ve-kaydet:
+  run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Kodları Al
-        uses: actions/checkout@v3
+      - name: Repo Checkout
+        uses: actions/checkout@v4
 
       - name: Python Kur
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Gerekli Kütüphaneleri Yükle
-        run: |
-          python -m pip install --upgrade pip
-          # tefas kütüphanesini ve eksik olan webdriver-manager'ı yüklüyoruz
-          pip install requests selenium webdriver-manager tefas 
+      - name: Sadece Requests Yukle
+        run: pip install requests
 
-      - name: TEFAS Botunu Çalıştır
-        run: |
-          python tefas_bot.py
-          # Eğer dosya güncellenmediyse hata ver
-          [ -f yatirim_fonlari.json ] || (echo "Dosya oluşturulamadı!" && exit 1)
+      - name: Veriyi Cek
+        run: python tefas_bot.py
 
-      - name: Yeni Verileri GitHub'a Kaydet
+      - name: Degisiklikleri Kaydet
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          if [ -f yatirim_fonlari.json ]; then
-            git add yatirim_fonlari.json
-            # Değişiklik yoksa hata vermeden bitir, varsa commit at ve pushla
-            git diff --quiet && git diff --staged --quiet || (git commit -m "Otomatik Güncelleme: TEFAS Verileri" && git push)
-          else
-            echo "Dosya bulunamadı, kayıt işlemi atlanıyor."
-          fi
+          git add yatirim_fonlari.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Otomatik Güncelleme: $(date +'%Y-%m-%d')" && git push)
