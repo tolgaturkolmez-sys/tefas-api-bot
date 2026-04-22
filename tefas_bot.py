@@ -3,8 +3,11 @@ import json
 from datetime import datetime
 
 def update_funds():
-    # KÖK NEDEN ÇÖZÜLDÜ: Doğru klasör /api/funds/ ve POST isteği
-    url = "https://tefas.takasbank.com.tr/api/funds/fonGetiriBazliBilgiGetir"
+    # Yeni Takasbank API uç noktası
+    url = "https://tefas.takasbank.com.tr/api/funds/fonGnlBlgSiraliGetir"
+    
+    # Bugünün tarihini API'nin istediği formatta (YYYYMMDD) alıyoruz
+    today_str = datetime.now().strftime("%Y%m%d")
     
     headers = {
         "Origin": "https://tefas.takasbank.com.tr",
@@ -14,80 +17,51 @@ def update_funds():
         "Accept": "application/json, text/plain, */*"
     }
     
-    # İŞTE BULDUĞUN O SİHİRLİ ŞİFRE (PAYLOAD)
+    # Görüntüden aldığımız Payload'u "bitSira: 3000" ile güçlendiriyoruz
     payload = {
-        "basTarih": None,
-        "bitTarih": None,
-        "calismaTipi": 2,
-        "dil": "TR",
-        "donemGetiri1a": "1",
-        "donemGetiri1y": "1",
-        "donemGetiri3a": "1",
-        "donemGetiri3y": "1",
-        "donemGetiri5y": "1",
-        "donemGetiri6a": "1",
-        "donemGetiriyb": "1",
-        "fonGrubu": None,
         "fonTipi": "YAT",
-        "fonTurAciklama": None,
+        "fonKodu": None,
+        "aramaMetni": None,
         "fonTurKod": None,
-        "getiriOrani": "1",
-        "islem": 1,
+        "basSira": 1,
+        "basTarih": today_str,
+        "bitSira": 3000, # Sayfalama engelini aşmak için yüksek değer
+        "bitTarih": today_str,
+        "dil": "TR",
+        "fonGrubu": None,
+        "fonTurAciklama": None,
         "kurucuKodu": None,
         "sfonTurKod": None
     }
     
     try:
-        print("Takasbank'a özel şifre (Payload) ile Chrome 110 kılığında bağlanılıyor...")
-        r = requests.post(url, json=payload, headers=headers, impersonate="chrome110", timeout=30)
+        print(f"Takasbank'tan {today_str} tarihli veriler çekiliyor...")
+        r = requests.post(url, json=payload, headers=headers, impersonate="chrome110", timeout=60)
         
         if r.status_code != 200:
             print(f"Bağlantı Hatası! HTTP Kodu: {r.status_code}")
-            print(f"Yanıt: {r.text[:300]}")
             exit(1)
             
-        try:
-            response_json = r.json()
-            # Takasbank'ın veri yapısına göre JSON içindeki listeyi buluyoruz
-            if isinstance(response_json, list):
-                fund_data = response_json
-            elif 'data' in response_json:
-                fund_data = response_json['data']
-            elif 'resultList' in response_json:
-                fund_data = response_json['resultList']
-            else:
-                fund_data = [response_json] 
-                
-        except json.decoder.JSONDecodeError:
-            print("Veri JSON formatında gelmedi! Güvenlik duvarına takıldık.")
-            exit(1)
+        data = r.json()
+        fund_list = data.get('resultList', [])
         
+        if not fund_list:
+            print("Veri boş döndü. Hafta sonu veya veri henüz girilmemiş olabilir.")
+            exit(1)
+            
         fund_map = {}
-        for f in fund_data:
-            if not isinstance(f, dict):
-                continue
-                
+        for f in fund_list:
             code = f.get('fonKodu')
-            # Fiyatı güvence altına alıyoruz (Farklı isimlerle gelebilir)
-            price = f.get('sonFiyat') or f.get('fiyat') or f.get('guncelFiyat') or f.get('fiyat1')
+            # 'fiyat' veya 'sonFiyat' sütununu kontrol ediyoruz
+            price = f.get('fiyat') or f.get('sonFiyat') or f.get('birimPayDegeri')
             
             if code and price is not None:
                 try:
                     fund_map[code] = float(price)
-                except ValueError:
+                except (ValueError, TypeError):
                     pass
         
-        # Eğer tablo fiyat bilgisini içermiyorsa (Sadece getiri yüzdeleri varsa) bizi uyaracak
-        if not fund_map and len(fund_data) > 0:
-            print("HAY AKSİ! Fon kodlarını buldum ama tablonun içinde 'Fiyat' verisini bulamadım.")
-            print("Takasbank'ın bu tabloda bize gönderdiği başlıklar şunlar:")
-            print(list(fund_data[0].keys()))
-            exit(1)
-            
-        if not fund_map:
-            print("Veri yine boş döndü! Payload doğru ama sistem anlık yanıt vermemiş olabilir.")
-            exit(1)
-            
+        # Sonuçları kaydet
         output = {
             "guncellenme_tarihi": datetime.now().strftime("%Y-%m-%d"),
             "fonlar": fund_map
@@ -96,10 +70,10 @@ def update_funds():
         with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
             
-        print(f"BÜYÜK ZAFER! Yeni Takasbank altyapısından tam {len(fund_map)} adet fonun fiyatı çekildi!")
+        print(f"BAŞARILI! {len(fund_map)} adet fonun fiyatı güncellendi.")
         
     except Exception as e:
-        print(f"Sistem Hatası: {e}")
+        print(f"Hata oluştu: {e}")
         exit(1)
 
 if __name__ == "__main__":
