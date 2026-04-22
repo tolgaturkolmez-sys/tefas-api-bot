@@ -1,40 +1,34 @@
-name: TEFAS Gunluk Guncelleme
+import requests
+import json
+from datetime import datetime
 
-on:
-  schedule:
-    - cron: '30 07 * * 1-5'
-  workflow_dispatch: 
+def update_funds():
+    url = "https://www.tefas.gov.tr/api/DB/BindMainIndicators"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://www.tefas.gov.tr/FonKarsilastirma.aspx"
+    }
+    payload = "fontip=YAT&sfontip=YAT"
+    
+    try:
+        r = requests.post(url, data=payload, headers=headers, timeout=30)
+        r.raise_for_status()
+        data = r.json().get('d', [])
+        
+        fund_map = {f['Fonkodu']: float(f['Fiyat']) for f in data if f.get('Fonkodu')}
+        
+        output = {
+            "guncellenme_tarihi": datetime.now().strftime("%Y-%m-%d"),
+            "fonlar": fund_map
+        }
+        
+        with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
+            json.dump(output, f, ensure_ascii=False, indent=2)
+        print("İşlem Başarılı.")
+    except Exception as e:
+        print(f"Hata: {e}")
+        exit(1)
 
-permissions:
-  contents: write 
-
-jobs:
-  veri-cek-ve-kaydet:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Kodları Al
-        uses: actions/checkout@v4
-
-      - name: Python Kur
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Kütüphaneleri Yükle
-        run: |
-          pip install requests  # Sadece requests kullanan hafif bot için
-
-      - name: TEFAS Botunu Çalıştır
-        run: |
-          # Mevcut dosyayı silerek scriptin gerçekten yeni bir tane oluşturduğunu test edelim
-          rm -f yatirim_fonlari.json
-          python tefas_bot.py
-          # Eğer script yeni dosya oluşturmadıysa burada fail eder
-          [ -f yatirim_fonlari.json ] || (echo "HATA: Script yeni veri dosyasını oluşturamadı!" && exit 1)
-
-      - name: Yeni Verileri GitHub'a Kaydet
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add yatirim_fonlari.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Otomatik Güncelleme: $(date +'%Y-%m-%d')" && git push)
+if __name__ == "__main__":
+    update_funds()
