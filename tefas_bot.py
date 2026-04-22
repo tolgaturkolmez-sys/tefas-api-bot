@@ -1,23 +1,41 @@
-import requests
+from curl_cffi import requests
 import json
 from datetime import datetime
 
 def update_funds():
     url = "https://www.tefas.gov.tr/api/DB/BindMainIndicators"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Origin": "https://www.tefas.gov.tr",
+        "Referer": "https://www.tefas.gov.tr/FonKarsilastirma.aspx",
         "X-Requested-With": "XMLHttpRequest",
-        "Referer": "https://www.tefas.gov.tr/FonKarsilastirma.aspx"
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "Accept": "application/json, text/javascript, */*; q=0.01"
     }
     payload = "fontip=YAT&sfontip=YAT"
     
     try:
-        r = requests.post(url, data=payload, headers=headers, timeout=30)
-        r.raise_for_status()
-        data = r.json().get('d', [])
+        # impersonate="chrome110" parametresi TEFAS güvenlik duvarını "gerçek insan" olduğuna inandırır
+        r = requests.post(url, data=payload, headers=headers, impersonate="chrome110", timeout=30)
+        
+        # Eğer yine de 200 dönmezse veya HTML dönerse hatayı yazdır ki görelim
+        if r.status_code != 200:
+            print(f"TEFAS Engeli! HTTP Kodu: {r.status_code}")
+            print(f"Dönen Yanıt: {r.text[:500]}")
+            exit(1)
+            
+        try:
+            data = r.json().get('d', [])
+        except json.decoder.JSONDecodeError:
+            print("TEFAS JSON yerine HTML döndürdü. IP tamamen banlanmış olabilir.")
+            print(f"Dönen Yanıt: {r.text[:500]}")
+            exit(1)
         
         fund_map = {f['Fonkodu']: float(f['Fiyat']) for f in data if f.get('Fonkodu')}
         
+        if not fund_map:
+            print("Veri boş döndü. TEFAS API formatı değiştirmiş olabilir.")
+            exit(1)
+            
         output = {
             "guncellenme_tarihi": datetime.now().strftime("%Y-%m-%d"),
             "fonlar": fund_map
@@ -25,9 +43,11 @@ def update_funds():
         
         with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
-        print("İşlem Başarılı.")
+            
+        print(f"İşlem Başarılı! {len(fund_map)} adet fon çekildi.")
+        
     except Exception as e:
-        print(f"Hata: {e}")
+        print(f"Beklenmeyen Hata: {e}")
         exit(1)
 
 if __name__ == "__main__":
