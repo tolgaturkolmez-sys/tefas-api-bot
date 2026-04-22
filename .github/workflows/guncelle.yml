@@ -22,14 +22,12 @@ jobs:
 
       - name: Kütüphaneleri Yükle
         run: |
-          pip install requests  # Sadece requests kullanan hafif bot için
+          pip install requests
 
       - name: TEFAS Botunu Çalıştır
         run: |
-          # Mevcut dosyayı silerek scriptin gerçekten yeni bir tane oluşturduğunu test edelim
           rm -f yatirim_fonlari.json
           python tefas_bot.py
-          # Eğer script yeni dosya oluşturmadıysa burada fail eder
           [ -f yatirim_fonlari.json ] || (echo "HATA: Script yeni veri dosyasını oluşturamadı!" && exit 1)
 
       - name: Yeni Verileri GitHub'a Kaydet
