@@ -22,7 +22,7 @@ jobs:
 
       - name: Kütüphaneleri Yükle
         run: |
-          pip install requests
+          pip install curl_cffi
 
       - name: TEFAS Botunu Çalıştır
         run: |
