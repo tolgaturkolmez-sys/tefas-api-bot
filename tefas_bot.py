@@ -3,8 +3,8 @@ import json
 from datetime import datetime
 
 def update_funds():
-    # Uç nokta (Endpoint) adresi (Eğer Headers'ta farklıysa burayı güncelle)
-    url = "https://tefas.takasbank.com.tr/api/statistics/tefas/fonBilgiGetir"
+    # Bulduğumuz o muazzam ana liste uç noktası
+    url = "https://tefas.takasbank.com.tr/api/statistics/tefas/fonGetiriBazliBilgiGetir"
     
     headers = {
         "Origin": "https://tefas.takasbank.com.tr",
@@ -14,30 +14,45 @@ def update_funds():
         "Accept": "application/json, text/plain, */*"
     }
     
-    # Şimdilik boş gönderiyoruz. (Eğer hata alırsak Payload sekmesine bakmamız gerekecek)
+    # Payload sekmesini göremediğimiz için boş gönderiyoruz (Tüm listeyi ver demektir)
     payload = {}
     
     try:
+        print("Takasbank'a Chrome 110 kılığında bağlanılıyor...")
         r = requests.post(url, json=payload, headers=headers, impersonate="chrome110", timeout=30)
         
         if r.status_code != 200:
             print(f"Bağlantı Hatası! HTTP Kodu: {r.status_code}")
+            # 500 veya 400 dönerse, Payload kısmına özel bir parametre eklememiz gerekiyordur.
             print(f"Yanıt: {r.text[:300]}")
             exit(1)
             
         try:
             response_json = r.json()
-            # YENİ YAPI: Veriler artık 'resultList' içinde
-            fund_data = response_json.get('resultList', [])
+            # Veriler listesi (Ekran görüntüsünde data'nın direkt liste mi yoksa 'data' anahtarı içinde mi olduğunu varsayıyoruz)
+            # Eğer doğrudan liste ise response_json'ın kendisi objedir, değilse 'data' veya 'resultList' içindedir.
+            
+            if isinstance(response_json, list):
+                fund_data = response_json
+            elif 'data' in response_json:
+                fund_data = response_json['data']
+            elif 'resultList' in response_json:
+                fund_data = response_json['resultList']
+            else:
+                fund_data = [response_json] # Ne olur ne olmaz
+                
         except json.decoder.JSONDecodeError:
-            print("Veri JSON formatında gelmedi! IP blokajı olabilir.")
+            print("Veri JSON formatında gelmedi! Güvenlik duvarına takıldık.")
             exit(1)
         
         fund_map = {}
         for f in fund_data:
-            # YENİ YAPI: Doğru değişken isimleri
+            if not isinstance(f, dict):
+                continue
+                
             code = f.get('fonKodu')
-            price = f.get('sonFiyat')
+            # Fiyat verisi 'sonFiyat', 'fiyat', veya 'fiyat1' gibi bir isimle gelmiş olabilir
+            price = f.get('sonFiyat') or f.get('fiyat') or f.get('guncelFiyat')
             
             if code and price is not None:
                 try:
@@ -45,9 +60,15 @@ def update_funds():
                 except ValueError:
                     pass
         
+        # Eğer fon kodu bulup fiyat bulamadıysa PM'i uyar
+        if not fund_map and len(fund_data) > 0:
+            print("HAY AKSİ! Fon kodlarını buldum ama 'Fiyat' verisini bulamadım.")
+            print("İşte Takasbank'ın bu pakette bize gönderdiği veri başlıkları:")
+            print(list(fund_data[0].keys()))
+            exit(1)
+            
         if not fund_map:
-            print("Veri boş döndü. Payload (gönderilen veri) eksik olabilir veya bu uç nokta toplu veri vermiyor olabilir.")
-            print(f"Gelen JSON: {response_json}")
+            print("Veri boş döndü. Payload (gönderilen veri) eksik!")
             exit(1)
             
         output = {
@@ -58,7 +79,7 @@ def update_funds():
         with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
             
-        print(f"Zafer! Yeni Takasbank sisteminden {len(fund_map)} adet fonun FİYAT verisi çekildi.")
+        print(f"Zafer! Yeni Takasbank sisteminden {len(fund_map)} adet fonun güncel fiyatı çekildi.")
         
     except Exception as e:
         print(f"Sistem Hatası: {e}")
