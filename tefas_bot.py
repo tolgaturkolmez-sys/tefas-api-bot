@@ -1,55 +1,40 @@
-import requests
-import json
-from datetime import datetime
+name: TEFAS Gunluk Guncelleme
 
-def fetch_tefas_data():
-    # TEFAS'ın karşılaştırma tablosunu besleyen asıl API endpoint'i
-    url = "https://www.tefas.gov.tr/api/DB/BindMainIndicators"
-    
-    # Tarayıcı gibi görünmek için bu header'lar şart
-    headers = {
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "Origin": "https://www.tefas.gov.tr",
-        "Referer": "https://www.tefas.gov.tr/FonKarsilastirma.aspx",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "X-Requested-With": "XMLHttpRequest"
-    }
-    
-    # Tüm yatırım fonlarını (YAT) çekmek için gereken parametre
-    payload = "fontip=YAT&sfontip=YAT"
-    
-    try:
-        response = requests.post(url, data=payload, headers=headers, timeout=30)
-        response.raise_for_status() # Hata varsa yakala
-        
-        # 'd' anahtarı içindeki veriyi al (TEFAS formatı böyledir)
-        raw_data = response.json().get('d', [])
-        
-        # Veriyi senin istediğin {"KOD": FIYAT} formatına dönüştür
-        funds = {}
-        for item in raw_data:
-            code = item.get('Fonkodu')
-            price = item.get('Fiyat')
-            if code and price is not None:
-                # Fiyatı float'a çeviriyoruz (Uygulama tarafında hesaplama yapabilmen için)
-                funds[code] = float(price)
-        
-        # Çıktı formatını hazırla
-        result = {
-            "guncellenme_tarihi": datetime.now().strftime("%Y-%m-%d"),
-            "fonlar": funds
-        }
-        
-        # JSON dosyasını kaydet
-        with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-            
-        print(f"Başarılı: {len(funds)} fon verisi güncellendi.")
-        
-    except Exception as e:
-        print(f"Hata Oluştu: {e}")
-        exit(1)
+on:
+  schedule:
+    - cron: '30 07 * * 1-5'
+  workflow_dispatch: 
 
-if __name__ == "__main__":
-    fetch_tefas_data()
+permissions:
+  contents: write 
+
+jobs:
+  veri-cek-ve-kaydet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodları Al
+        uses: actions/checkout@v4
+
+      - name: Python Kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Kütüphaneleri Yükle
+        run: |
+          pip install requests  # Sadece requests kullanan hafif bot için
+
+      - name: TEFAS Botunu Çalıştır
+        run: |
+          # Mevcut dosyayı silerek scriptin gerçekten yeni bir tane oluşturduğunu test edelim
+          rm -f yatirim_fonlari.json
+          python tefas_bot.py
+          # Eğer script yeni dosya oluşturmadıysa burada fail eder
+          [ -f yatirim_fonlari.json ] || (echo "HATA: Script yeni veri dosyasını oluşturamadı!" && exit 1)
+
+      - name: Yeni Verileri GitHub'a Kaydet
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add yatirim_fonlari.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Otomatik Güncelleme: $(date +'%Y-%m-%d')" && git push)
