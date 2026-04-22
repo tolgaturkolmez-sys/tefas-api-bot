@@ -26,10 +26,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Gerekli Kütüphaneleri Yükle
-        # Buraya 'tefas' kütüphanesini ekledik
-        run: pip install requests pandas tefas
-
       - name: TEFAS Botunu Çalıştır
         run: |
           python tefas_bot.py
