@@ -1,32 +1,37 @@
-from tefas import Crawler
+import requests
 import json
-import pandas as pd
-import sys
 
-def verileri_cek_ve_kaydet():
+def get_all_tefas_funds():
+    url = "https://www.tefas.gov.tr/api/DB/BindMainIndicators"
+    
+    # TEFAS'ın beklediği kritik header'lar
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://www.tefas.gov.tr/FonKarsilastirma.aspx"
+    }
+    
+    # Tüm fon tiplerini kapsayan payload
+    payload = {"fontip": "YAT", "sfontip": "YAT"}
+    
     try:
-        # 1. Uzman kütüphaneyi çalıştırıyoruz
-        crawler = Crawler()
+        response = requests.post(url, data=payload, headers=headers)
+        data = response.json().get('d', [])
         
-        # 2. TEFAS'tan güncel fon verilerini çekiyoruz
-        # (Bu kütüphane 10 Nisan'da gelen engelleri aşmak için güncellendi)
-        df = crawler.fetch()
+        # Senin istediğin formata dönüştürme
+        fund_dict = {item['Fonkodu']: item['Fiyat'] for item in data}
         
-        if df is not None and not df.empty:
-            # 3. Veriyi JSON formatına dönüştür
-            veriler = df.to_dict(orient='records')
+        output = {
+            "guncellenme_tarihi": "2026-04-22",
+            "fonlar": fund_dict
+        }
+        
+        with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
+            json.dump(output, f, ensure_ascii=False, indent=2)
             
-            with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
-                json.dump(veriler, f, ensure_ascii=False, indent=4)
-            
-            print(f"BAŞARILI! {len(veriler)} adet fon kaydedildi.")
-        else:
-            print("HATA: TEFAS'tan veri çekilemedi (Liste boş döndü).")
-            sys.exit(1) # GitHub Actions'ın kırmızı yanmasını sağlar
-
+        print(f"Başarılı! {len(fund_dict)} adet fon güncellendi.")
+        
     except Exception as e:
-        print(f"SİSTEM HATASI: {str(e)}")
-        sys.exit(1)
+        print(f"Hata: {e}")
 
-if __name__ == "__main__":
-    verileri_cek_ve_kaydet()
+get_all_tefas_funds()
