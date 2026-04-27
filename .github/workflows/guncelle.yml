@@ -22,17 +22,23 @@ jobs:
 
       - name: Kütüphaneleri Yükle
         run: |
-          pip install curl_cffi
+          pip install curl_cffi firebase-admin tefas webdriver-manager selenium
+
+      - name: Firebase Anahtarını Oluştur
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > service_account.json
 
       - name: TEFAS Botunu Çalıştır
         run: |
+          # Önceki dosyayı temizle
           rm -f yatirim_fonlari.json
           python tefas_bot.py
-          [ -f yatirim_fonlari.json ] || (echo "HATA: Script yeni veri dosyasını oluşturamadı!" && exit 1)
+          # Dosya oluştu mu kontrol et (Hala GitHub'a yedek almak istersen diye)
+          [ -f yatirim_fonlari.json ] || echo "UYARI: JSON dosyası oluşmadı ama Firestore aktarımı denenmiş olabilir."
 
-      - name: Yeni Verileri GitHub'a Kaydet
+      - name: Yeni Verileri GitHub'a Kaydet (Yedek)
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add yatirim_fonlari.json
+          git add yatirim_fonlari.json || true
           git diff --quiet && git diff --staged --quiet || (git commit -m "Otomatik Güncelleme: $(date +'%Y-%m-%d')" && git push)
