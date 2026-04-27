@@ -4,14 +4,14 @@ from datetime import datetime
 
 def update_funds():
     # Yeni Takasbank API uç noktası
-    url = "https://tefas.takasbank.com.tr/api/funds/fonGnlBlgSiraliGetir"
+    url = "https://tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir"
     
     # Bugünün tarihini API'nin istediği formatta (YYYYMMDD) alıyoruz
     today_str = datetime.now().strftime("%Y%m%d")
     
     headers = {
-        "Origin": "https://tefas.takasbank.com.tr",
-        "Referer": "https://tefas.takasbank.com.tr/tr",
+        "Origin": "https://tefas.gov.tr",
+        "Referer": "https://tefas.gov.tr/tr",
         "X-Requested-With": "XMLHttpRequest",
         "Content-Type": "application/json;charset=UTF-8",
         "Accept": "application/json, text/plain, */*"
