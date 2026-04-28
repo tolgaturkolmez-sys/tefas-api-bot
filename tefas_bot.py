@@ -4,7 +4,7 @@ from datetime import datetime
 
 def update_funds():
     # Yeni Takasbank API uç noktası
-    url = "https://www.tefas.gov.tr/api/funds/fonBilgiGetir"
+    url = "https://www.tefas.gov.tr/tr/fon-verileri?fundType=YAT"
     
     # Bugünün tarihini API'nin istediği formatta (YYYYMMDD) alıyoruz
     today_str = datetime.now().strftime("%Y%m%d")
