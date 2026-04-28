@@ -13,10 +13,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 def update_funds():
-    print("🚀 TEFAS Bot başlatılıyor (Anti-Bot + CSV İndirme Modu)...")
+    print("🚀 TEFAS Bot başlatılıyor (Tam Yetkili CSV İndirme Modu)...")
 
-    # İndirme klasörünü ayarla ve eski csv kalıntılarını temizle
-    download_dir = os.getcwd()
+    # ÇÖZÜM 1: İndirme klasörünü kesin ve mutlak (absolute) yol olarak belirliyoruz
+    download_dir = os.path.abspath(os.getcwd())
+    
+    # Eski csv kalıntılarını temizle
     for f in glob.glob("*.csv"):
         try: os.remove(f)
         except: pass
@@ -27,25 +29,31 @@ def update_funds():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("window-size=1920,1080")
     
-    # 🛡️ ANTI-BOT ZIRHI GERİ GELDİ (GitHub sunucularında engellenmemek için şart)
+    # Anti-Bot Zırhı
     options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
 
-    # 📥 GİZLİ İNDİRME İZİNLERİ
+    # ÇÖZÜM 2: Headless modda indirmeye izin veren en katı ayarlar
     prefs = {
         "download.default_directory": download_dir,
         "download.prompt_for_download": False,
-        "profile.default_content_settings.popups": 0,
-        "safebrowsing.enabled": False
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True, # Chrome'un dosyayı virüs sanıp engellemesini önler
+        "profile.default_content_settings.popups": 0
     }
     options.add_experimental_option("prefs", prefs)
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     
-    # JavaScript Navigator kimliğini silerek bot olduğumuzu gizliyoruz
+    # ÇÖZÜM 3: Chrome DevTools Protocol (CDP) ile arka planda indirme kilidini zorla açıyoruz
+    driver.execute_cdp_cmd('Page.setDownloadBehavior', {
+        'behavior': 'allow',
+        'downloadPath': download_dir
+    })
+    
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
     try:
@@ -53,58 +61,56 @@ def update_funds():
         print(f"🌐 {url} adresine gidiliyor...")
         driver.get(url)
 
-        print("⏳ JavaScript'in sayfayı oluşturması bekleniyor (Maks 30 sn)...")
+        print("⏳ Sayfanın tam yüklenmesi bekleniyor...")
         wait = WebDriverWait(driver, 30)
         
-        # 1. Önce Tablonun Gelmesini Bekle (Sayfanın tam yüklendiğinin garantisi)
+        # Tablo belirene kadar bekle
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
         print("📊 Tablo ekranda belirdi! CSV butonu aranıyor...")
         
-        time.sleep(2) # JS eventlerinin butona tam bağlanması için mini bir mola
+        time.sleep(3) # JavaScript butonlarının tamamen aktifleşmesi için kısa bir mola
         
-        # 2. 'CSV' İbaresi Geçen Herhangi Bir Elementi Yakala
-        csv_xpath = "//*[contains(text(), 'CSV')] | //a[contains(@href, 'csv')]"
-        csv_btn = wait.until(EC.presence_of_element_located((By.XPATH, csv_xpath)))
+        # CSV butonunu bul ve bekle
+        csv_xpath = "//*[contains(text(), 'CSV')]/ancestor-or-self::button"
+        csv_btn = wait.until(EC.element_to_be_clickable((By.XPATH, csv_xpath)))
 
         print("📥 'CSV' butonuna tıklanıyor...")
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", csv_btn)
-        time.sleep(1)
-        driver.execute_script("arguments[0].click();", csv_btn)
+        # JavaScript ile tıklama bazen event'i tetiklemez, standart Selenium click deniyoruz önce
+        try:
+            csv_btn.click()
+        except:
+            driver.execute_script("arguments[0].click();", csv_btn)
 
-        # 3. İndirmenin Tamamlanmasını Bekle
-        print("⏳ Dosyanın inmesi bekleniyor...")
+        # İndirmenin tamamlanmasını bekle
+        print("⏳ Dosyanın sunucuya kaydedilmesi bekleniyor...")
         csv_file = None
-        for _ in range(30):
+        for _ in range(40): # Süreyi 40 saniyeye çıkardık (GitHub bazen yavaş indirebilir)
             files = glob.glob("*.csv")
-            cr_files = glob.glob("*.crdownload") # Chrome indirme yaparken bu uzantıyı kullanır
+            cr_files = glob.glob("*.crdownload") 
             
-            # Eğer .csv dosyası var ve .crdownload dosyası (indirme devam etmiyor) yoksa:
             if files and not cr_files:
                 csv_file = files[0]
                 break
             time.sleep(1)
 
         if not csv_file:
-            print("❌ HATA: CSV dosyası belirtilen sürede indirilemedi.")
+            print("❌ HATA: CSV dosyası indirilemedi. Chrome izin vermemiş olabilir.")
             exit(1)
 
         print(f"✅ Dosya başarıyla yakalandı: {csv_file}")
-        print("📊 Pandas ile veriler okunup JSON'a çevriliyor...")
+        print("📊 Pandas ile veriler JSON'a dönüştürülüyor...")
 
-        # TEFAS .csv standartları: noktalı virgül, Türkçe karakter seti
         try:
             df = pd.read_csv(csv_file, sep=';', decimal=',', thousands='.', encoding='utf-8')
         except UnicodeDecodeError:
             df = pd.read_csv(csv_file, sep=';', decimal=',', thousands='.', encoding='cp1254')
 
-        # Sütun isimleri dinamik aranıyor
         kod_sutunu = next((col for col in df.columns if 'Kod' in str(col)), None)
         fiyat_sutunu = next((col for col in df.columns if 'Fiyat' in str(col) or 'Değer' in str(col)), None)
 
         fund_map = {}
         records = df.to_dict(orient="records")
 
-        # JSON formatına dönüşüm (Finans Asistanım uyumlu)
         for row in records:
             code = row.get(kod_sutunu)
             price = row.get(fiyat_sutunu)
@@ -116,7 +122,7 @@ def update_funds():
                     pass
 
         if not fund_map:
-            print("❌ CSV okundu ama liste boş. TEFAS formatı değiştirmiş olabilir.")
+            print("❌ CSV listesi boş. TEFAS formatı değiştirmiş olabilir.")
             exit(1)
 
         output = {
@@ -127,17 +133,14 @@ def update_funds():
         with open('yatirim_fonlari.json', 'w', encoding='utf-8') as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
 
-        print(f"🎉 BİNGO! Tek hamlede {len(fund_map)} adet fon okundu ve JSON'a aktarıldı.")
+        print(f"🎉 BİNGO! İndirilen CSV'den {len(fund_map)} adet fon okundu ve JSON'a aktarıldı.")
 
     except Exception as e:
         print(f"❌ Kritik Hata: {e}")
-        print("\n⚠️ TEŞHİS RAPORU: GitHub sunucusunda engellendiysek HTML şöyle gözükür:")
-        print(driver.page_source[:1000]) # Hata olursa sayfanın kodunu görelim
         exit(1)
     finally:
         print("🧹 Temizlik yapılıyor...")
         driver.quit()
-        # GitHub deposunda çöp bırakmamak için inen .csv'yi siliyoruz
         for f in glob.glob("*.csv"):
             try: os.remove(f)
             except: pass
