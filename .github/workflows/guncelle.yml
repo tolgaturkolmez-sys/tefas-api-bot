@@ -2,6 +2,8 @@ name: TEFAS Gunluk Guncelleme
 
 on:
   schedule:
+    # GitHub sunucuları UTC saat dilimindedir. 
+    # 07:30 UTC = Türkiye Saati ile 10:30 demektir. (TEFAS verilerinin oturması için ideal bir saat)
     - cron: '30 07 * * 1-5'
   workflow_dispatch: 
 
@@ -22,7 +24,8 @@ jobs:
 
       - name: Kütüphaneleri Yükle
         run: |
-          pip install curl_cffi firebase-admin tefas webdriver-manager selenium
+          # ÖNEMLİ: curl_cffi ve tefas çıkarıldı. pandas ve lxml eklendi.
+          pip install selenium webdriver-manager pandas lxml firebase-admin
 
       - name: Firebase Anahtarını Oluştur
         run: |
@@ -32,9 +35,12 @@ jobs:
         run: |
           # Önceki dosyayı temizle
           rm -f yatirim_fonlari.json
+          
+          # Botu tetikle
           python tefas_bot.py
-          # Dosya oluştu mu kontrol et (Hala GitHub'a yedek almak istersen diye)
-          [ -f yatirim_fonlari.json ] || echo "UYARI: JSON dosyası oluşmadı ama Firestore aktarımı denenmiş olabilir."
+          
+          # Dosya oluştu mu kontrol et
+          [ -f yatirim_fonlari.json ] || echo "UYARI: JSON dosyası oluşmadı. Bot ekrandan veri alamamış olabilir."
 
       - name: Yeni Verileri GitHub'a Kaydet (Yedek)
         run: |
