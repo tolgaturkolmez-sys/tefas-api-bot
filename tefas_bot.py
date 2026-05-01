@@ -32,11 +32,18 @@ def fetch_tefas():
 def json_uret(df):
     fonlar = {}
 
-    for _, row in df.iterrows():
-        kod = row["FONKODU"]
-        fiyat = row["FIYAT"]
+    print("Kolonlar:", df.columns)
 
-        fonlar[kod] = fiyat
+    for _, row in df.iterrows():
+        kod = row.get("FONKODU") or row.get("FONKOD") or row.get("code")
+        fiyat = row.get("FIYAT") or row.get("price") or row.get("PRICE")
+
+        if kod and fiyat:
+            fonlar[kod] = fiyat
+
+    if not fonlar:
+        print("❌ Fon verisi boş!")
+        return
 
     cikti = {
         "guncellenme_tarihi": datetime.now().strftime("%Y-%m-%d"),
@@ -46,12 +53,4 @@ def json_uret(df):
     with open("yatirim_fonlari.json", "w", encoding="utf-8") as f:
         json.dump(cikti, f, ensure_ascii=False, indent=2)
 
-    print("✅ JSON oluşturuldu!")
-
-
-df = fetch_tefas()
-
-if df is not None and not df.empty:
-    json_uret(df)
-else:
-    print("❌ Veri yok, JSON oluşturulmadı")
+    print("✅ JSON oluşturuldu!", len(fonlar), "adet fon")
