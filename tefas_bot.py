@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Türkiye resmi tatilleri (MM-DD)
 RECURRING_HOLIDAYS = {
     "01-01", "04-23", "05-01", "05-19",
     "07-15", "08-30", "10-29",
@@ -21,24 +22,19 @@ def is_holiday(d):
 def fetch_tefas_data():
     session = requests.Session()
     session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "application/json, text/javascript, */*; q=0.01",
         "Accept-Language": "tr-TR,tr;q=0.9",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
         "Origin": "https://www.tefas.gov.tr",
+        "Referer": "https://www.tefas.gov.tr/TarihselVeriler.aspx",
     })
 
-    # Önce TarihselVeriler sayfasına gidip cookie al
-    referer = "https://www.tefas.gov.tr/TarihselVeriler.aspx"
     try:
-        session.get(referer, verify=False, timeout=20)
-        session.headers.update({"Referer": referer})
+        session.get("https://www.tefas.gov.tr/TarihselVeriler.aspx", verify=False, timeout=20)
     except Exception:
         pass
-
-    # BindHistoryInfo: tarih formatı YYYY-MM-DD
-    url = "https://www.tefas.gov.tr/api/DB/BindHistoryInfo"
 
     today = date.today()
     records = []
@@ -60,7 +56,10 @@ def fetch_tefas_data():
         }
 
         try:
-            resp = session.post(url, data=payload, verify=False, timeout=60)
+            resp = session.post(
+                "https://www.tefas.gov.tr/api/DB/BindHistoryInfo",
+                data=payload, verify=False, timeout=60
+            )
             resp.raise_for_status()
             data = resp.json()
             records = data.get("data", [])
@@ -74,7 +73,7 @@ def fetch_tefas_data():
             print(f"{date_str}: Hata - {e}")
 
     if not records:
-        print("HATA: Son 14 günde veri alınamadı!")
+        print("HATA: Veri alınamadı!")
         sys.exit(1)
 
     all_funds = {}
@@ -96,7 +95,7 @@ def fetch_tefas_data():
         all_funds[kod] = round(fiyat, 6)
 
     if not all_funds:
-        print("HATA: Veri parse edilemedi. Örnek kayıt:", records[0])
+        print("HATA: Veri parse edilemedi. Örnek:", records[0])
         sys.exit(1)
 
     output = {
@@ -104,11 +103,15 @@ def fetch_tefas_data():
         "fonlar": all_funds,
     }
 
-    file_path = "yatirim_fonlari .json"
+    # Script'in bulunduğu klasöre kaydet
+    import os
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, "yatirim_fonlari .json")
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=4)
 
-    print(f"BAŞARILI! {len(all_funds)} fon yazıldı. Tarih: {found_date}")
+    print(f"BAŞARILI! {len(all_funds)} fon yazıldı → {file_path}")
+    return file_path
 
 if __name__ == "__main__":
     fetch_tefas_data()
