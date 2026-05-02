@@ -1,88 +1,67 @@
 import json
 import time
+import os
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 def fetch_tefas_data():
     url = "https://www.tefas.gov.tr/tr/fon-verileri?fundType=YAT"
     
-    # Chrome'u arkaplanda (headless) çalışması için ayarlıyoruz
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-gpu") # GitHub Actions için önemli
     
-    print("Tarayıcı başlatılıyor ve TEFAS'a bağlanılıyor...")
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     
     try:
         driver.get(url)
+        wait = WebDriverWait(driver, 30)
         
-        # Tablonun yüklenmesi için bekliyoruz (Maksimum 20 saniye)
-        wait = WebDriverWait(driver, 20)
-        # Tablonun body kısmının geldiğinden emin oluyoruz
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "tbody")))
-        print("Tablo yüklendi. 25'li limit kaldırılıyor...")
+        # Tablonun gelmesini bekle
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#main-table")))
         
-        # Sayfada "Kayıtları Göster" (DataTables length) dropdown'ı varsa onu bulup "Tümü" veya en büyük değeri seçiyoruz
+        # Sayfalama limitini kaldır (Tümü seçeneği)
         try:
-            # Dropdown elementini bul (Genelde select elementi class'ı veya name'i ile bulunur)
-            # Not: Sitenin yapısına göre bu seçici (selector) değişebilir. Genel bir datatable yapısı varsayılmıştır.
-            select_element = wait.until(EC.presence_of_element_located((By.XPATH, "//select[contains(@name, 'length')]")))
+            select_element = driver.find_element(By.NAME, "main-table_length")
             select = Select(select_element)
-            
-            # Seçenekler arasında '-1' (Tümü) veya '100' vb. en büyük değeri seç
-            options = [opt.get_attribute("value") for opt in select.options]
-            if "-1" in options:
-                select.select_by_value("-1")  # 'Tümü' seçeneği
-            else:
-                select.select_by_index(len(options) - 1) # En sondaki seçeneği (en büyük sayıyı) seç
-                
-            time.sleep(3) # Tablonun yeniden yüklenmesi için kısa bir bekleme
-            print("Tüm veriler sayfaya yüklendi.")
-        except Exception as e:
-            print("Dropdown bulunamadı veya sayfada farklı bir pagination var. Sayfa sayfa geçiş stratejisi denenebilir.")
-            # Eğer dropdown yoksa, Next (İleri) butonuna tıklayarak döngüye giren bir kod da yazılabilir.
+            select.select_by_value("-1")
+            time.sleep(5) # Verilerin yüklenmesi için bekle
+        except:
+            print("Dropdown bulunamadı, varsayılan liste ile devam ediliyor.")
 
-        # Tablonun güncel (tüm verileri içeren) HTML kaynağını alıyoruz
-        html_source = driver.page_source
-        soup = BeautifulSoup(html_source, 'html.parser')
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        table = soup.find('table', {'id': 'main-table'})
         
-        # Tabloyu parse ediyoruz
-        table = soup.find('table')
+        if not table:
+            print("Hata: Tablo bulunamadı!")
+            return
+
         headers = [th.text.strip() for th in table.find('thead').find_all('th')]
-        
         funds_data = []
-        rows = table.find('tbody').find_all('tr')
         
-        for row in rows:
+        for row in table.find('tbody').find_all('tr'):
             cols = row.find_all('td')
-            if cols:
-                fund = {}
-                for i, col in enumerate(cols):
-                    # Başlık sayısıyla sütun sayısını eşleştiriyoruz
-                    if i < len(headers):
-                        fund[headers[i]] = col.text.strip()
+            if len(cols) > 0:
+                fund = {headers[i]: cols[i].text.strip() for i in range(len(headers))}
                 funds_data.append(fund)
         
-        print(f"Toplam {len(funds_data)} adet fon verisi çekildi.")
-        
-        # Veriyi JSON olarak kaydet
-        with open('yatırım_fonları.json', 'w', encoding='utf-8') as f:
+        # DOSYA ADINDA TÜRKÇE KARAKTER KULLANMIYORUZ
+        file_path = 'yatirim_fonlari.json'
+        with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(funds_data, f, ensure_ascii=False, indent=4)
             
-        print("Veriler 'yatırım_fonları.json' dosyasına başarıyla kaydedildi.")
+        print(f"Başarılı! {len(funds_data)} fon kaydedildi: {os.path.abspath(file_path)}")
 
     except Exception as e:
-        print(f"Bir hata oluştu: {e}")
+        print(f"Hata oluştu: {e}")
     finally:
         driver.quit()
 
