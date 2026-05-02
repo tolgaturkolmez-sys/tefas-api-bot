@@ -1,39 +1,32 @@
-name: Tefas Bot Güncelleme
+name: Tefas Otomatik API
 
 on:
   schedule:
-    - cron: '0 18 * * *' # Her gün 21:00 TSİ
-  workflow_dispatch:
+    - cron: '0 18 * * *' # Her gün TSİ 21:00'de çalışır
+  workflow_dispatch: # Manuel çalıştırma butonu ekler
 
 jobs:
-  build:
+  scrape:
     runs-on: ubuntu-latest
     steps:
-    - name: Repoyu Klonla
-      uses: actions/checkout@v3
+      - name: Repoyu Klonla
+        uses: actions/checkout@v3
 
-    - name: Python Kurulumu
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Python Kurulumu
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    - name: Kütüphaneleri Yukle
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests
+      - name: Bağımlılıkları Yükle
+        run: pip install requests
 
-    - name: Botu Calistir
-      run: python tefas_bot.py
+      - name: Botu Çalıştır
+        run: python tefas_bot.py
 
-    - name: Degisiklikleri Kaydet ve Pushla
-      run: |
-        git config --global user.name 'github-actions[bot]'
-        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        if [ -f yatirim_fonlari.json ]; then
+      - name: Veriyi GitHub'a Gönder
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add yatirim_fonlari.json
-          git commit -m "Veriler güncellendi: $(date)" || echo "Değişiklik yok"
+          git commit -m "Güncel Fon Verileri: $(date +'%Y-%m-%d')" || echo "Değişiklik yok"
           git push
-        else
-          echo "Hata: Dosya oluşmadı!"
-          exit 1
-        fi
