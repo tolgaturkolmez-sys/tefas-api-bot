@@ -1,90 +1,80 @@
 import requests
 import json
 import sys
+import urllib3
 from datetime import date, timedelta
 
-# Türkiye resmi tatilleri (MM-DD formatında, her yıl tekrar eder)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 RECURRING_HOLIDAYS = {
-    "01-01",  # Yılbaşı
-    "04-23",  # Ulusal Egemenlik ve Çocuk Bayramı
-    "05-01",  # Emek ve Dayanışma Günü
-    "05-19",  # Atatürk'ü Anma, Gençlik ve Spor Bayramı
-    "07-15",  # Demokrasi ve Millî Birlik Günü
-    "08-30",  # Zafer Bayramı
-    "10-29",  # Cumhuriyet Bayramı
+    "01-01", "04-23", "05-01", "05-19",
+    "07-15", "08-30", "10-29",
 }
 
 def is_holiday(d):
-    """Hafta sonu veya resmi tatil mi kontrol et."""
     if d.weekday() >= 5:
         return True
     if d.strftime("%m-%d") in RECURRING_HOLIDAYS:
         return True
     return False
 
-def get_last_trading_day(d, max_lookback=10):
-    """En son işlem gününü bul (tatil ve hafta sonu atla)."""
-    for _ in range(max_lookback):
-        if not is_holiday(d):
-            return d
-        d -= timedelta(days=1)
-    return d
-
 def fetch_tefas_data():
-    trading_day = get_last_trading_day(date.today())
-    date_str = trading_day.strftime("%d.%m.%Y")
-    guncelleme_tarihi = trading_day.strftime("%Y-%m-%d")
-
-    print(f"Bugün: {date.today()}, İşlem günü: {date_str}")
-
-    url = "https://www.tefas.gov.tr/api/DB/BindHistoryInfo"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json, text/javascript, */*; q=0.01",
         "Accept-Language": "tr-TR,tr;q=0.9",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
         "Origin": "https://www.tefas.gov.tr",
-        "Referer": "https://www.tefas.gov.tr/",
-    }
+    })
 
-    session = requests.Session()
+    # Önce TarihselVeriler sayfasına gidip cookie al
+    referer = "https://www.tefas.gov.tr/TarihselVeriler.aspx"
     try:
-        session.get("https://www.tefas.gov.tr/", headers={"User-Agent": headers["User-Agent"]}, timeout=20)
+        session.get(referer, verify=False, timeout=20)
+        session.headers.update({"Referer": referer})
     except Exception:
         pass
 
-    # Doğru tarihi bulmak için geriye doğru dene (Ramazan/Kurban bayramı gibi dini tatiller için)
+    # BindHistoryInfo: tarih formatı YYYY-MM-DD
+    url = "https://www.tefas.gov.tr/api/DB/BindHistoryInfo"
+
+    today = date.today()
     records = []
-    found_date = trading_day
-    for attempt in range(10):
-        attempt_date = trading_day - timedelta(days=attempt)
-        if is_holiday(attempt_date):
+    found_date = None
+
+    for i in range(14):
+        attempt = today - timedelta(days=i)
+        if is_holiday(attempt):
             continue
-        attempt_str = attempt_date.strftime("%d.%m.%Y")
+
+        date_str = attempt.strftime("%Y-%m-%d")
+        print(f"Deneniyor: {date_str}")
+
         payload = {
             "fontip": "YAT",
-            "bastarih": attempt_str,
-            "bittarih": attempt_str,
+            "bastarih": date_str,
+            "bittarih": date_str,
             "fonkod": "",
         }
+
         try:
-            resp = session.post(url, data=payload, headers=headers, timeout=60)
+            resp = session.post(url, data=payload, verify=False, timeout=60)
             resp.raise_for_status()
             data = resp.json()
             records = data.get("data", [])
             if records:
-                found_date = attempt_date
-                guncelleme_tarihi = found_date.strftime("%Y-%m-%d")
-                print(f"Veri bulundu: {attempt_str} ({len(records)} fon)")
+                found_date = attempt
+                print(f"Veri bulundu: {date_str} ({len(records)} fon)")
                 break
             else:
-                print(f"{attempt_str}: Veri yok (tatil/hafta sonu olabilir), önceki güne geçiliyor...")
+                print(f"{date_str}: Veri yok")
         except Exception as e:
-            print(f"{attempt_str}: İstek hatası - {e}")
+            print(f"{date_str}: Hata - {e}")
 
     if not records:
-        print("HATA: Son 10 iş günü için hiç veri alınamadı!")
+        print("HATA: Son 14 günde veri alınamadı!")
         sys.exit(1)
 
     all_funds = {}
@@ -106,12 +96,11 @@ def fetch_tefas_data():
         all_funds[kod] = round(fiyat, 6)
 
     if not all_funds:
-        print("HATA: Yanıt alındı ama fon verisi parse edilemedi!")
-        print("Örnek kayıt:", records[0] if records else "yok")
+        print("HATA: Veri parse edilemedi. Örnek kayıt:", records[0])
         sys.exit(1)
 
     output = {
-        "guncellenme_tarihi": guncelleme_tarihi,
+        "guncellenme_tarihi": found_date.strftime("%Y-%m-%d"),
         "fonlar": all_funds,
     }
 
@@ -119,7 +108,7 @@ def fetch_tefas_data():
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=4)
 
-    print(f"BAŞARILI! {len(all_funds)} fon '{file_path}' dosyasına yazıldı. Tarih: {guncelleme_tarihi}")
+    print(f"BAŞARILI! {len(all_funds)} fon yazıldı. Tarih: {found_date}")
 
 if __name__ == "__main__":
     fetch_tefas_data()
