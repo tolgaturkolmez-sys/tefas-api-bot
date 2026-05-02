@@ -3,105 +3,103 @@ import json
 import sys
 from datetime import date, timedelta
 
+def get_last_weekday(d):
+    """Hafta sonu ise son iş gününe çek."""
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
 def fetch_tefas_data():
-    session = requests.Session()
-
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept-Language": "tr-TR,tr;q=0.9",
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "X-Requested-With": "XMLHttpRequest",
-        "Origin": "https://www.tefas.gov.tr",
-        "Referer": "https://www.tefas.gov.tr/tr/fon-verileri?fundType=YAT",
-    })
-
-    # Cookie almak için önce ana sayfaya git
-    print("Ana sayfadan cookie alınıyor...")
-    try:
-        session.get("https://www.tefas.gov.tr/tr/fon-verileri?fundType=YAT", timeout=30)
-    except Exception as e:
-        print(f"Cookie alınamadı (devam ediliyor): {e}")
-
-    today = date.today()
+    today = get_last_weekday(date.today())
     date_str = today.strftime("%d.%m.%Y")
-
-    # Hafta sonu kontrolü - son iş gününe git
-    weekday = today.weekday()
-    if weekday == 5:  # Cumartesi
-        today = today - timedelta(days=1)
-    elif weekday == 6:  # Pazar
-        today = today - timedelta(days=2)
-    date_str = today.strftime("%d.%m.%Y")
-
-    url = "https://www.tefas.gov.tr/api/DB/Bind2Container/GetFundData"
-
-    all_funds = {}
-    start = 0
-    page_size = 500
-    max_pages = 10
     guncelleme_tarihi = today.strftime("%Y-%m-%d")
 
-    print(f"Fon verileri çekiliyor ({date_str})...")
+    url = "https://www.tefas.gov.tr/api/DB/BindHistoryInfo"
 
-    for page in range(max_pages):
-        payload = {
-            "fundType": "YAT",
-            "startDate": date_str,
-            "endDate": date_str,
-            "order[0][column]": "0",
-            "order[0][dir]": "asc",
-            "start": str(start),
-            "length": str(page_size),
-            "draw": str(page + 1),
-        }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "tr-TR,tr;q=0.9",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": "https://www.tefas.gov.tr",
+        "Referer": "https://www.tefas.gov.tr/",
+    }
 
-        try:
-            resp = session.post(url, data=payload, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            print(f"Sayfa {page+1} hatası: {e}")
-            if page == 0:
-                sys.exit(1)
-            break
+    payload = {
+        "fontip": "YAT",
+        "bastarih": date_str,
+        "bittarih": date_str,
+        "fonkod": "",
+    }
 
-        records = data.get("data", [])
-        total = data.get("recordsTotal", 0)
+    print(f"TEFAS verisi çekiliyor ({date_str})...")
 
-        if not records:
-            print(f"Sayfa {page+1}: Veri yok, duruyoruz.")
-            break
+    session = requests.Session()
+    # Önce ana sayfaya gidip cookie alalım
+    try:
+        session.get("https://www.tefas.gov.tr/", headers={"User-Agent": headers["User-Agent"]}, timeout=20)
+    except Exception:
+        pass
 
-        for row in records:
-            # API genellikle liste döner: [kod, fiyat, ...]
-            # veya dict: {"FONKODU": "AAK", "BIRIMPAYFIYATI": "35.21", ...}
-            if isinstance(row, list):
-                kod = str(row[0]).strip()
-                try:
-                    fiyat = float(str(row[1]).replace(",", "."))
-                except:
-                    fiyat = 0.0
-            elif isinstance(row, dict):
-                kod = str(row.get("FONKODU", row.get("code", ""))).strip()
-                raw = row.get("BIRIMPAYFIYATI", row.get("price", row.get("FIYAT", "0")))
-                try:
-                    fiyat = float(str(raw).replace(",", "."))
-                except:
-                    fiyat = 0.0
-            else:
+    try:
+        resp = session.post(url, data=payload, headers=headers, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"HATA: İstek başarısız - {e}")
+        sys.exit(1)
+
+    records = data.get("data", [])
+
+    if not records:
+        # Tatil günü olabilir, 3 gün geriye kadar dene
+        print(f"Uyarı: {date_str} için veri yok. Önceki iş günleri deneniyor...")
+        for i in range(1, 4):
+            alt_date = get_last_weekday(today - timedelta(days=i))
+            alt_str = alt_date.strftime("%d.%m.%Y")
+            payload["bastarih"] = alt_str
+            payload["bittarih"] = alt_str
+            try:
+                resp = session.post(url, data=payload, headers=headers, timeout=60)
+                resp.raise_for_status()
+                data = resp.json()
+                records = data.get("data", [])
+                if records:
+                    guncelleme_tarihi = alt_date.strftime("%Y-%m-%d")
+                    print(f"Veri {alt_str} tarihi için bulundu.")
+                    break
+            except Exception:
                 continue
 
-            if kod:
-                all_funds[kod] = round(fiyat, 6)
+    if not records:
+        print("HATA: Hiçbir tarih için veri alınamadı!")
+        sys.exit(1)
 
-        print(f"Sayfa {page+1}: {len(records)} fon alındı (toplam şimdiye kadar: {len(all_funds)}, genel toplam: {total})")
+    all_funds = {}
+    for row in records:
+        if isinstance(row, dict):
+            kod = str(row.get("FONKODU", "")).strip()
+            raw = row.get("FIYAT", "0")
+        elif isinstance(row, list) and len(row) >= 2:
+            kod = str(row[0]).strip()
+            raw = row[1]
+        else:
+            continue
 
-        start += page_size
-        if start >= total or len(records) < page_size:
-            break
+        if not kod:
+            continue
+
+        try:
+            fiyat = float(str(raw).replace(",", "."))
+        except (ValueError, TypeError):
+            fiyat = 0.0
+
+        all_funds[kod] = round(fiyat, 6)
 
     if not all_funds:
-        print("HATA: Hiç fon verisi alınamadı!")
+        print(f"HATA: Yanıt alındı ama fon verisi parse edilemedi!")
+        print("Örnek kayıt:", records[0] if records else "yok")
         sys.exit(1)
 
     output = {
@@ -113,7 +111,7 @@ def fetch_tefas_data():
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=4)
 
-    print(f"\nBAŞARILI! {len(all_funds)} fon '{file_path}' dosyasına yazıldı.")
+    print(f"BAŞARILI! {len(all_funds)} fon '{file_path}' dosyasına yazıldı.")
 
 if __name__ == "__main__":
     fetch_tefas_data()
