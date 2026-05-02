@@ -26,7 +26,7 @@ jobs:
       - name: Bağımlılıkları yükle
         run: |
           pip install --upgrade pip
-          pip install tefas
+          pip install tefas-crawler
           python -c "from tefas import Crawler; print('tefas kurulumu OK')"
 
       - name: TEFAS verilerini çek
