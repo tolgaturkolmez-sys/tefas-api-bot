@@ -1,0 +1,43 @@
+name: Tefas Bot Güncelleme
+
+on:
+  schedule:
+    - cron: '0 18 * * *' # Her gün 21:00 TSİ
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Repoyu Klonla
+      uses: actions/checkout@v3
+
+    - name: Python Kurulumu
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Bagimliliklari Yukle
+      run: |
+        python -m pip install --upgrade pip
+        pip install selenium beautifulsoup4 webdriver-manager
+
+    - name: Botu Calistir
+      run: python tefas_bot.py
+
+    - name: Dosya Kontrolu (Debug)
+      run: ls -R # Dosya gerçekten oluştu mu kontrol etmek için
+
+    - name: Degisiklikleri Kaydet
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        # Eğer dosya varsa ekle, yoksa hata verme
+        if [ -f yatirim_fonlari.json ]; then
+          git add yatirim_fonlari.json
+          git commit -m "Veriler güncellendi: $(date)" || echo "Değişiklik yok"
+          git push
+        else
+          echo "Hata: yatirim_fonlari.json dosyası oluşmadı!"
+          exit 1
+        fi
