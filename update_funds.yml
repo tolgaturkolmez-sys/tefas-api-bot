@@ -2,17 +2,15 @@ name: TEFAS Fon Verilerini Güncelle
 
 on:
   schedule:
-    # Her gün Türkiye saatiyle 19:00'da çalışır (UTC 16:00)
-    # Borsa kapanışından sonra güncel fiyatlar yayınlanır
     - cron: "0 16 * * 1-5"
-  workflow_dispatch: # Manuel çalıştırma butonu
+  workflow_dispatch:
 
 jobs:
   update-funds:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write  # Repo'ya push edebilmek için
+      contents: write
 
     steps:
       - name: Repo'yu klonla
@@ -24,10 +22,7 @@ jobs:
           python-version: "3.11"
 
       - name: Bağımlılıkları yükle
-        run: |
-          pip install --upgrade pip
-          pip install tefas-crawler
-          python -c "from tefas import Crawler; print('tefas kurulumu OK')"
+        run: pip install requests
 
       - name: TEFAS verilerini çek
         run: python tefas_bot.py
