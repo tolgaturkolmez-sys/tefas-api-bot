@@ -12,43 +12,30 @@ def csv_to_json():
         sys.exit(1)
 
     try:
-        # 1. TEFAS CSV'lerinde başlıklar genellikle 4. satırdadır (skiprows=3).
-        # 2. utf-8-sig kullanarak Türkçe karakter ve BOM sorununu çözüyoruz.
+        # TEFAS CSV yapısına göre ilk 3 satırı atlayıp başlıkları alıyoruz
         df = pd.read_csv(csv_file, sep=',', encoding='utf-8-sig', skiprows=3)
         
-        # Sütun isimlerini temizle (boşlukları at)
+        # Sütun isimlerini temizle
         df.columns = [c.strip() for c in df.columns]
 
-        # Sayısal alanları temizleme fonksiyonu (Örn: "35,21" -> 35.21)
-        def clean_numeric(val):
-            if pd.isna(val): return 0
-            val = str(val).replace('"', '').replace('.', '').replace(',', '.')
-            try:
-                return float(val)
-            except:
-                return 0
-
-        # Sayısal sütunları dönüştür
+        # Sayısal temizlik (Flutter'da hata almamak için)
         if 'Fiyat' in df.columns:
-            # Fiyatlarda binlik ayırıcı nokta olmayabilir, direkt temizliyoruz.
             df['Fiyat'] = df['Fiyat'].astype(str).str.replace('"', '').str.replace(',', '.')
             df['Fiyat'] = pd.to_numeric(df['Fiyat'], errors='coerce')
-
-        if 'Fon Toplam Değer' in df.columns:
-            df['Fon Toplam Değer'] = df['Fon Toplam Değer'].apply(clean_numeric)
 
         data_list = df.to_dict(orient='records')
         
         output = {
-            "guncellenme_tarihi": pd.Timestamp.now().strftime('%d.%m.%Y %H:%M'),
+            # Flutter'daki DateTime.parse() için ISO formatı (YYYY-MM-DD) en sağlıklısıdır
+            "guncellenme_tarihi": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
             "fon_sayisi": len(data_list),
-            "veriler": data_list
+            "fonlar": data_list  # Flutter kodunun beklediği anahtar ismi
         }
 
         with open(json_file, 'w', encoding='utf-8') as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
             
-        print(f"Başarılı: {len(data_list)} fon verisi temiz bir şekilde dönüştürüldü.")
+        print(f"Başarılı: JSON yapısı mobil uygulamaya uyarlandı ({len(data_list)} fon).")
 
     except Exception as e:
         print(f"Dönüştürme hatası: {e}")
