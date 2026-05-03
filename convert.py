@@ -12,30 +12,44 @@ def csv_to_json():
         sys.exit(1)
 
     try:
-        # TEFAS CSV yapısına göre ilk 3 satırı atlayıp başlıkları alıyoruz
+        # TEFAS CSV yapısında başlıklar 4. satırdadır (index 3)
         df = pd.read_csv(csv_file, sep=',', encoding='utf-8-sig', skiprows=3)
         
         # Sütun isimlerini temizle
         df.columns = [c.strip() for c in df.columns]
 
-        # Sayısal temizlik (Flutter'da hata almamak için)
-        if 'Fiyat' in df.columns:
-            df['Fiyat'] = df['Fiyat'].astype(str).str.replace('"', '').str.replace(',', '.')
-            df['Fiyat'] = pd.to_numeric(df['Fiyat'], errors='coerce')
+        # Fon Kodu ve Fiyat sütunlarının varlığını kontrol et
+        if 'Fon Kodu' not in df.columns or 'Fiyat' not in df.columns:
+            print("Hata: Gerekli sütunlar (Fon Kodu veya Fiyat) bulunamadı.")
+            sys.exit(1)
 
-        data_list = df.to_dict(orient='records')
-        
+        # Fiyatları sayısal formata (float) çevir
+        # Örn: "35,215392" -> 35.215392
+        def temizle_fiyat(val):
+            try:
+                return float(str(val).replace('"', '').replace(',', '.'))
+            except:
+                return 0.0
+
+        # Yeni Key-Value yapısını oluştur
+        fon_sozlugu = {}
+        for _, row in df.iterrows():
+            kod = str(row['Fon Kodu']).strip()
+            fiyat = temizle_fiyat(row['Fiyat'])
+            if kod:
+                fon_sozlugu[kod] = fiyat
+
+        # İstediğin final format
         output = {
-            # Flutter'daki DateTime.parse() için ISO formatı (YYYY-MM-DD) en sağlıklısıdır
-            "guncellenme_tarihi": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "fon_sayisi": len(data_list),
-            "fonlar": data_list  # Flutter kodunun beklediği anahtar ismi
+            "guncellenme_tarihi": pd.Timestamp.now().strftime('%Y-%m-%d'),
+            "fonlar": fon_sozlugu
         }
 
+        # JSON olarak kaydet
         with open(json_file, 'w', encoding='utf-8') as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
             
-        print(f"Başarılı: JSON yapısı mobil uygulamaya uyarlandı ({len(data_list)} fon).")
+        print(f"Başarılı: {len(fon_sozlugu)} fon istediğin formatta kaydedildi.")
 
     except Exception as e:
         print(f"Dönüştürme hatası: {e}")
